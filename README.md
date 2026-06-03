@@ -49,7 +49,7 @@ GitHub Dependabot        Webhook Listener        Triage Classifier
 | `flask` | 2.3.3 | 3.1.3 | breaking_change | [**PR #22**](https://github.com/thagikura/superset-fork/pull/22) — migrates removed `escape()`, JSON encoder changes across 229 files |
 | `simplejson` | * | — | library_replacement | [**PR #26**](https://github.com/thagikura/superset-fork/pull/26) — replaces `simplejson` with stdlib `json`, migrates `DashboardEncoder` |
 | `pyarrow` | 20.0.0 | 23.0.1 | breaking_change | [**PR #21**](https://github.com/thagikura/superset-fork/pull/21) — audits `pa.Table`/`pa.Array` usage across 10 files |
-| `pyjwt` | 2.12.0 | 2.13.0 | simple_bump | Bumps version + audits `jwt.decode()` call sites for key confusion vulnerability |
+| `pyjwt` | 2.12.0 | 2.13.0 | simple_bump | [**PR #28**](https://github.com/thagikura/superset-fork/pull/28) — bumps version + audits 7 JWT call sites, adds `_validate_guest_token_algorithm()` defense, writes 3 regression tests |
 | `paramiko` | 3.5.1 | — | no_fix | [**Issue #23**](https://github.com/thagikura/superset-fork/issues/23) — human escalation with exposure analysis |
 
 ## Quick Start
