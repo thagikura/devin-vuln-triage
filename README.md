@@ -118,22 +118,74 @@ Used to verify that incoming webhooks are genuinely from GitHub.
 
 ### Simulate a Dependabot Alert
 
+Instead of waiting for real Dependabot alerts (which require a public webhook endpoint), you can use the `/simulate` endpoint to feed the same vulnerability data through the pipeline. The example payloads in `examples/` were built by querying the same upstream sources that GitHub Dependabot uses:
+
+- **[GitHub Advisory Database](https://github.com/advisories)** — the primary source for CVEs and GHSAs affecting open-source packages
+- **[OSV.dev](https://osv.dev/)** — Google's aggregated vulnerability database (includes PyPI, npm, and other ecosystems)
+
+Each payload mirrors the exact JSON schema of a real `dependabot_alert` webhook event, with advisory details (CVE IDs, CVSS scores, affected version ranges, patched versions) taken directly from these databases. The only difference from a live webhook is that `/simulate` skips HMAC signature verification.
+
 ```bash
-# Simple version bump (pyjwt)
+# Simple version bump — pyjwt HMAC key confusion (PYSEC-2026-179)
+# Devin bumps 2.12→2.13 + audits jwt.decode() call sites
 curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
   -d @examples/pyjwt-alert.json
 
-# Breaking change (flask 2.x → 3.x)
+# Breaking change — Flask 2.x→3.x (CVE-2026-27205)
+# Devin migrates removed APIs (escape(), JSON encoder) across 229 files
 curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
   -d @examples/flask-alert.json
 
-# No fix available (paramiko)
+# Breaking change — PyArrow 20→23 (PYSEC-2026-113)
+# Devin audits pa.Table/pa.Array usage, migrates across 3 major versions
+curl -X POST http://localhost:8000/simulate \
+  -H "Content-Type: application/json" \
+  -d @examples/pyarrow-alert.json
+
+# Library replacement — simplejson DoS (CVE-2026-99001)
+# Devin replaces simplejson with Python's stdlib json module
+curl -X POST http://localhost:8000/simulate \
+  -H "Content-Type: application/json" \
+  -d @examples/simplejson-replacement-alert.json
+
+# No fix available — paramiko SHA-1 (CVE-2026-44405)
+# Creates a GitHub Issue for human engineer escalation
 curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
   -d @examples/paramiko-alert.json
 ```
+
+#### Creating Custom Alert Payloads
+
+To test with your own vulnerabilities, copy any `examples/*.json` file and modify the fields:
+
+```json
+{
+  "action": "created",
+  "alert": {
+    "number": 999,
+    "dependency": {
+      "package": { "ecosystem": "pip", "name": "your-package" },
+      "manifest_path": "requirements/base.txt"
+    },
+    "security_vulnerability": {
+      "severity": "high",
+      "vulnerable_version_range": ">= 1.0.0, < 2.0.0",
+      "first_patched_version": { "identifier": "2.0.0" }
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-xxxx-yyyy-zzzz",
+      "cve_id": "CVE-2026-XXXXX",
+      "summary": "Description of the vulnerability"
+    }
+  },
+  "repository": { "full_name": "your-org/your-repo" }
+}
+```
+
+Set `"first_patched_version": null` to trigger `no_fix` classification. Use `"_meta": { "category_override": "library_replacement", "alternative_package": "replacement-lib" }` to force a library replacement flow.
 
 ### CLI Reporting
 
