@@ -10,22 +10,22 @@ Dependabot finds vulnerabilities and can bump version numbers, but it can't reas
 
 ```
 GitHub Dependabot        Webhook Listener        Triage Classifier
-(automatic scanning)  →  (FastAPI)            →  (4 categories)
+(automatic scanning)  →  (FastAPI)            →  (5 categories)
      +                                              │
-Static Analysis                  ┌───────────┬──────┴──────┬───────────┐
-(code-level findings)            │           │             │           │
-                          simple_bump  breaking_change  code_audit   no_fix
-                                 │           │             │           │
-                                 ▼           ▼             ▼           ▼
-                            Devin: bump  Devin: full   Devin: fix  GitHub Issue
-                            + audit      migration     code        → human
-                            + harden     + test        patterns    escalation
-                                 │           │             │
-                                 └─────────┬─┘─────────────┘
-                                           ▼
-                              Session Monitor ──→ Polls status, tracks PRs
-                                           ▼
-                              CLI / Dashboard ──→ Pipeline metrics
+Static Analysis            ┌──────────┬─────────┬───┴────┬───────────┐
+(code-level findings)      │          │         │        │           │
+                     simple_bump  breaking  lib_replace  code_audit  no_fix
+                           │      _change      │        │           │
+                           ▼         ▼          ▼        ▼           ▼
+                      Devin:     Devin:    Devin:    Devin: fix   GitHub Issue
+                      bump +     full      swap lib  code         → human
+                      audit      migration + test    patterns     escalation
+                           │         │          │        │
+                           └────────┬┘──────────┘────────┘
+                                    ▼
+                       Session Monitor ──→ Polls status, tracks PRs
+                                    ▼
+                       CLI / Dashboard ──→ Pipeline metrics
 ```
 
 ### Triage Categories
@@ -34,8 +34,9 @@ Static Analysis                  ┌───────────┬──�
 |----------|----------|----------------|---------------------|
 | **simple_bump** | Fix exists, same major version | Bump version + **audit codebase** for the vulnerable pattern + harden code + add tests | Dependabot only changes the version number |
 | **breaking_change** | Fix exists, different major version | Full migration: read CHANGELOG, inventory all API usage, update imports/code, fix tests | Dependabot can't handle breaking API changes |
+| **library_replacement** | No fix exists, but a known alternative library is available | **Replace** the vulnerable library with the alternative, migrate all call sites, run tests | Dependabot can't swap libraries |
 | **code_audit** | Insecure code pattern (not a version issue) | Find all instances of the pattern, replace with safe alternative, ensure backward compatibility | Dependabot can't detect code-level issues |
-| **no_fix** | No fix available | **Creates GitHub Issue** — deep exposure analysis for human engineer | Both escalate, but Devin provides file:line analysis |
+| **no_fix** | No fix available, no known alternative | **Creates GitHub Issue** — deep exposure analysis for human engineer | Both escalate, but Devin provides file:line analysis |
 
 ### Real Vulnerabilities (from Apache Superset)
 
@@ -46,6 +47,7 @@ Static Analysis                  ┌───────────┬──�
 | **pyarrow** 20→23 | breaking_change | Audits 10 files using `pa.Table`/`pa.Array`/`pa.types`, migrates deprecated APIs across 3 major versions |
 | **pickle.loads** | code_audit | Replaces unsafe `PickleKeyValueCodec` with JSON alternative, updates `metastore_cache.py` default codec |
 | **yaml.load** | code_audit | Replaces `yaml.Loader` with `yaml.safe_load()`, removes `# noqa: S506` suppression |
+| **simplejson** (DoS) | library_replacement | **Replaces** `simplejson` with Python's built-in `json` module — migrates `DashboardEncoder`, `dumps`/`loads` calls, removes dependency |
 | **paramiko** (SHA-1) | no_fix | Creates GitHub Issue with exposure analysis: traces `RSAKey` usage in SSH tunneling, assesses production reachability |
 | **eslint-plugin-i18n-strings** | no_fix | Creates GitHub Issue noting this is a local `file:` package (not the malicious npm one), recommends renaming |
 
@@ -117,6 +119,11 @@ curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
   -d @examples/pickle-deserialization-alert.json
 
+# Library replacement (simplejson → stdlib json — full migration)
+curl -X POST http://localhost:8000/simulate \
+  -H "Content-Type: application/json" \
+  -d @examples/simplejson-replacement-alert.json
+
 # No fix available (paramiko — human escalation)
 curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
@@ -128,6 +135,9 @@ curl -X POST http://localhost:8000/simulate \
 ```bash
 # Pipeline status summary
 python -m app.cli status
+
+# Refresh all active sessions (polls Devin API, updates DB)
+python -m app.cli refresh
 
 # Detailed alert list (JSON)
 python -m app.cli alerts
@@ -212,6 +222,28 @@ devin-vuln-triage/
 ├── Dockerfile
 ├── docker-compose.yml
 └── .env.example
+```
+
+## Known Limitations & Production Roadmap
+
+| Limitation | Why | Production Fix |
+|------------|-----|----------------|
+| **SQLite DB is local to the container** | Session status is lost on server restart; no shared state across replicas | Swap `DATABASE_URL` to a managed PostgreSQL/MySQL instance |
+| **Polling-based session tracking** | The Devin API does not support webhook callbacks for session completion; we poll `GET /sessions/{id}` | Use `cli refresh` to manually sync, or rely on the auto-resume on server restart |
+| **No real Dependabot webhook in demo** | We use the `/simulate` endpoint with pre-built payloads | In production, configure a real GitHub webhook pointing to `/webhook/github` |
+| **Single-process monitor** | Background polling tasks run in the FastAPI event loop; lost on process crash | Move to a task queue (Celery, arq) or a dedicated worker process |
+| **`session_timeout_seconds` = 30 min** | Complex migrations (e.g., Flask 2→3) can take longer | Increase via env var or implement checkpoint-based monitoring |
+
+### Session Monitoring Recovery
+
+On server startup, the monitor automatically resumes polling for any sessions left in `dispatched` or `running` state. You can also manually sync at any time:
+
+```bash
+# One-shot: poll all active sessions and update the local DB
+python -m app.cli refresh
+
+# Then check updated status
+python -m app.cli status
 ```
 
 ## Related Repositories

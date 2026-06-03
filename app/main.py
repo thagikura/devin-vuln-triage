@@ -14,7 +14,7 @@ from app.dashboard import get_alert_list, get_metrics
 from app.dispatcher import build_prompt, create_devin_session
 from app.github_client import create_tracking_issue
 from app.models import Alert, AlertStatus, SessionLocal, SessionLog, init_db
-from app.monitor import start_monitoring
+from app.monitor import resume_all_active, start_monitoring
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ templates = Jinja2Templates(directory="templates")
 async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized")
+    await resume_all_active()
     yield
 
 
