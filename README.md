@@ -10,30 +10,37 @@ Dependabot finds vulnerabilities but someone still has to fix them. For large co
 
 ```
 GitHub Dependabot        Webhook Listener        Triage Classifier
-(automatic scanning)  →  (FastAPI)            →  (simple/breaking/no-fix)
+(automatic scanning)  →  (FastAPI)            →  (4 categories)
                                                        │
-                              ┌─────────────────────────┤
-                              │                         │
-                    Fix available?              No fix available?
-                              │                         │
-                              ▼                         ▼
-                  Devin Session Dispatcher     GitHub Issue Creator
-                  → Creates PR via Devin API   → Escalates to human engineer
-                              │
-                              ▼
-                  Session Monitor ──→ Polls status, tracks PRs
-                              │
-                              ▼
-                  CLI / Dashboard ──→ Pipeline metrics & alert status
+                         ┌─────────────────────────────┬┘
+                         │                             │
+                   Fix available?               No fix available?
+                         │                             │
+                    ┌────┴────┐               ┌────────┴────────┐
+                    │         │               │                 │
+              simple_bump  breaking       Alternative       No alternative
+                    │      _change        library known?      known
+                    │         │               │                 │
+                    ▼         ▼               ▼                 ▼
+              Devin:      Devin:         Devin:           GitHub Issue
+              bump +      full API       replace lib      → human engineer
+              audit       migration      + run tests      escalation
+                    │         │               │
+                    └────┬────┘───────────────┘
+                         ▼
+              Session Monitor ──→ Polls status, tracks PRs
+                         ▼
+              CLI / Dashboard ──→ Pipeline metrics & alert status
 ```
 
 ### Triage Categories
 
 | Category | Criteria | Action |
 |----------|----------|--------|
-| **simple_bump** | Fix exists, same major version | **Devin creates PR** — bumps version, runs tests |
-| **breaking_change** | Fix exists, different major version | **Devin creates PR** — bumps version, checks CHANGELOG, updates code, documents migrations |
-| **no_fix** | No fix available | **Creates GitHub Issue** — escalates to human engineer for risk assessment |
+| **simple_bump** | Fix exists, same major version | **Devin creates PR** — bumps version + audits codebase for the vulnerable pattern |
+| **breaking_change** | Fix exists, different major version | **Devin creates PR** — reads CHANGELOG, inventories all API usage, migrates code, fixes tests |
+| **library_replacement** | No fix exists, but a known alternative library is available | **Devin creates PR** — replaces the vulnerable library with the alternative, migrates all call sites, runs tests |
+| **no_fix** | No fix available, no known alternative | **Creates GitHub Issue** — escalates to human engineer with exposure analysis |
 
 ### Real Vulnerabilities (from Apache Superset)
 
