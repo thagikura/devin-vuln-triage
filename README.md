@@ -63,10 +63,56 @@ The server starts at `http://localhost:8000`.
 |----------|----------|-------------|
 | `DEVIN_API_TOKEN` | Yes | Devin API service user token (`cog_...`) |
 | `DEVIN_ORG_ID` | Yes | Devin organization ID |
-| `GITHUB_TOKEN` | Yes | GitHub token with `issues:write` on target repo |
-| `GITHUB_WEBHOOK_SECRET` | No | Webhook signature secret (skips validation if empty) |
+| `GITHUB_TOKEN` | Yes | GitHub PAT with `repo` scope on the target repo |
+| `GITHUB_WEBHOOK_SECRET` | No | Webhook HMAC-SHA256 secret (skips validation if empty) |
 | `TARGET_REPO` | No | Target repo (default: `thagikura/superset-fork`) |
 | `DATABASE_URL` | No | DB connection string (default: SQLite). Supports PostgreSQL, MySQL. |
+
+### Obtaining the Keys
+
+#### 1. `DEVIN_API_TOKEN`
+
+A Devin API service user token is required to create and monitor Devin sessions.
+
+1. Go to **[Devin Settings → API Tokens](https://app.devin.ai/settings/tokens)**
+2. Click **"Create token"**
+3. Give it a descriptive name (e.g., `vuln-triage-service`)
+4. Copy the token (starts with `cog_...`) — it is only shown once
+
+> **Permissions:** The token needs the ability to create sessions and read session status. A standard service user token has these by default.
+
+#### 2. `DEVIN_ORG_ID`
+
+Your Devin organization ID tells the API which org to create sessions under.
+
+1. Go to **[Devin Settings](https://app.devin.ai/settings)**
+2. Your organization ID is displayed under the **Organization** section
+3. Copy the value (e.g., `org-abc123def456`)
+
+#### 3. `GITHUB_TOKEN`
+
+A GitHub Personal Access Token (PAT) is used to create issues and post comments on the target repository.
+
+1. Go to **[GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens](https://github.com/settings/personal-access-tokens/new)**
+2. Set a descriptive name (e.g., `devin-vuln-triage`)
+3. Under **Repository access**, select **"Only select repositories"** and choose your target repo
+4. Under **Permissions → Repository permissions**, grant:
+   - **Issues**: Read and write (to create tracking issues for `no_fix` alerts)
+   - **Pull requests**: Read (to read PR URLs from Devin sessions)
+   - **Contents**: Read (so Devin can clone the repo — this is passed to the Devin session)
+5. Click **Generate token** and copy it
+
+> **Classic PAT alternative:** If using a classic token, grant the `repo` scope. Fine-grained tokens are recommended for least-privilege access.
+
+#### 4. `GITHUB_WEBHOOK_SECRET` (production only)
+
+Used to verify that incoming webhooks are genuinely from GitHub.
+
+1. Generate a random secret:
+   ```bash
+   openssl rand -hex 32
+   ```
+2. Save this value — you'll need it in both your `.env` file and the GitHub webhook configuration
 
 ## Usage
 
@@ -116,13 +162,62 @@ python -m app.cli simulate examples/pyjwt-alert.json
 | `/api/alerts` | GET | All alerts with status (JSON) |
 | `/dashboard` | GET | HTML dashboard (auto-refreshes) |
 
-### GitHub Webhook Setup
+### GitHub Webhook Setup (Production)
 
-1. Go to your repo → Settings → Webhooks → Add webhook
-2. **Payload URL:** `https://your-server/webhook/github`
-3. **Content type:** `application/json`
-4. **Secret:** (same as `GITHUB_WEBHOOK_SECRET`)
-5. **Events:** Select "Dependabot alerts"
+To receive real Dependabot alerts (instead of using `/simulate`), configure a GitHub webhook:
+
+#### Prerequisites
+
+- Your server must be publicly accessible (e.g., deployed to Fly.io, Railway, AWS, etc.)
+- You need admin access to the target GitHub repository
+- `GITHUB_WEBHOOK_SECRET` must be set in your `.env` (see [Configuration](#configuration))
+
+#### Step-by-step
+
+1. **Deploy the server** to a publicly accessible URL (e.g., `https://vuln-triage.fly.dev`)
+
+2. **Go to your repo's webhook settings:**
+   ```
+   https://github.com/<owner>/<repo>/settings/hooks/new
+   ```
+   Or: Repository → Settings → Webhooks → **Add webhook**
+
+3. **Configure the webhook:**
+
+   | Field | Value |
+   |-------|-------|
+   | **Payload URL** | `https://your-server.example.com/webhook/github` |
+   | **Content type** | `application/json` |
+   | **Secret** | The same value as your `GITHUB_WEBHOOK_SECRET` env var |
+
+4. **Select events:**
+   - Choose **"Let me select individual events"**
+   - Check **"Dependabot alerts"**
+   - Uncheck "Pushes" (not needed)
+   - Click **Add webhook**
+
+5. **Verify the webhook:**
+   - GitHub sends a `ping` event immediately — check your server logs for `POST /webhook/github`
+   - Trigger a real alert by merging a dependency with a known vulnerability, or use the **Security → Dependabot alerts** tab to re-open an existing alert
+
+#### Webhook Signature Verification
+
+The server validates incoming webhooks using HMAC-SHA256:
+
+```
+X-Hub-Signature-256: sha256=<hex digest of HMAC(secret, body)>
+```
+
+If `GITHUB_WEBHOOK_SECRET` is not set, signature verification is **skipped** (useful for local development, but never do this in production).
+
+#### Troubleshooting
+
+| Issue | Fix |
+|-------|-----|
+| Webhook returns `403` | Check that `GITHUB_WEBHOOK_SECRET` matches between GitHub and your `.env` |
+| Webhook returns `422` | The payload may not be a Dependabot alert event — check the event type |
+| No alerts arriving | Ensure "Dependabot alerts" is selected in webhook events, not just "Security advisories" |
+| Alerts arrive but no Devin session | Check server logs — the alert may be classified as `no_fix` (creates an issue, not a session) |
 
 ## Architecture
 
