@@ -1,0 +1,29 @@
+{
+  "action": "created",
+  "alert": {
+    "number": 4,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "ecosystem": "pip",
+        "name": "paramiko"
+      },
+      "manifest_path": "requirements/base.txt"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-paramiko-2026",
+      "cve_id": "CVE-2026-44405",
+      "summary": "Paramiko allows SHA-1 algorithm in RSA key verification",
+      "severity": "medium",
+      "permalink": "https://github.com/advisories/GHSA-paramiko-2026"
+    },
+    "security_vulnerability": {
+      "severity": "medium",
+      "vulnerable_version_range": "<= 4.0.0",
+      "first_patched_version": null
+    }
+  },
+  "repository": {
+    "full_name": "thagikura/superset-fork"
+  }
+}
