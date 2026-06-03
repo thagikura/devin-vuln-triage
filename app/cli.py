@@ -45,6 +45,8 @@ def print_status() -> None:
     by_cat = metrics["sessions_by_category"]
     print(f"  Simple Bumps:     {by_cat.get('simple_bump', 0)}")
     print(f"  Breaking Changes: {by_cat.get('breaking_change', 0)}")
+    print(f"  Lib Replacements: {by_cat.get('library_replacement', 0)}")
+    print(f"  Code Audits:      {by_cat.get('code_audit', 0)}")
     print(f"  No Fix Available: {by_cat.get('no_fix', 0)}")
     print("=" * 60)
     print()
