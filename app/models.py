@@ -22,6 +22,8 @@ class Base(DeclarativeBase):
 class TriageCategory(str, Enum):
     SIMPLE_BUMP = "simple_bump"
     BREAKING_CHANGE = "breaking_change"
+    LIBRARY_REPLACEMENT = "library_replacement"
+    CODE_AUDIT = "code_audit"
     NO_FIX = "no_fix"
 
 
