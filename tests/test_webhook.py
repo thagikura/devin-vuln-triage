@@ -16,6 +16,7 @@ def test_parse_created_alert():
     assert alert.severity == "high"
     assert alert.repo == "thagikura/superset-fork"
     assert "PYSEC-2026-179" in alert.cve_ids
+    assert alert.vuln_description != ""  # enriched payload has description
 
 
 def test_parse_no_fix_alert():
@@ -53,7 +54,7 @@ def test_parse_breaking_change_alert():
     assert alert is not None
     assert alert.package_name == "flask"
     assert alert.fix_version == "3.1.3"
-    assert alert.current_version == "2.0.0"
+    assert alert.current_version == "unknown"  # range is "< 3.1.3" with no lower bound
 
 
 def test_extract_lower_bound():

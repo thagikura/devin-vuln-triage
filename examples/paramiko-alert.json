@@ -13,13 +13,14 @@
     "security_advisory": {
       "ghsa_id": "GHSA-paramiko-2026",
       "cve_id": "CVE-2026-44405",
-      "summary": "Paramiko allows SHA-1 algorithm in RSA key verification",
+      "summary": "Paramiko rsakey.py allows SHA-1 algorithm usage",
       "severity": "medium",
-      "permalink": "https://github.com/advisories/GHSA-paramiko-2026"
+      "permalink": "https://github.com/advisories/GHSA-paramiko-2026",
+      "description": "Paramiko 3.5.1 allows SHA-1 signature algorithms in `rsakey.py`, which are considered cryptographically weak. NIST deprecated SHA-1 for digital signatures in 2011. No patched version is available.\n\n**Exposure analysis required:**\n- Find all usages of `paramiko` in the codebase (imports, SSH connections, key operations)\n- Determine if SSH connections are made to production systems or only used for dev/testing\n- Check if RSA key operations use SHA-1 signatures (the vulnerable path)\n- Assess whether the SSH functionality can be replaced with a non-paramiko alternative\n- Check if `from paramiko import RSAKey` is used directly (most vulnerable pattern)\n\n**Risk factors:**\n- Is paramiko a direct dependency or transitive?\n- Are SSH connections initiated from user-controlled input?\n- What authentication methods are used (key-based, password, etc.)?"
     },
     "security_vulnerability": {
       "severity": "medium",
-      "vulnerable_version_range": "<= 4.0.0",
+      "vulnerable_version_range": "<= 3.5.1",
       "first_patched_version": null
     }
   },

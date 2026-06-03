@@ -15,7 +15,8 @@
       "cve_id": "PYSEC-2026-179",
       "summary": "PyJWT HMAC key confusion allows token forgery",
       "severity": "high",
-      "permalink": "https://github.com/advisories/GHSA-75c5-xw7c-p5pm"
+      "permalink": "https://github.com/advisories/GHSA-75c5-xw7c-p5pm",
+      "description": "PyJWT prior to 2.13.0 does not validate use of JSON Web Keys in HMAC algorithms. When a verifier supports both asymmetric (e.g. RS256) and HMAC (e.g. HS256) algorithms, an attacker can use the issuer's public key as the HMAC secret key to forge valid tokens.\n\n**Vulnerable pattern:** Any `jwt.decode()` call that accepts both HMAC and asymmetric algorithms without strict key-type validation. Look for:\n- `jwt.decode(token, key, algorithms=[\"HS256\", \"RS256\", ...])` where `key` could be a public key\n- Usage of `_jwt_global_obj` or `PyJWKClient` for token verification\n- Guest token / embedded analytics flows that verify JWTs\n\n**What to audit:** Trace every `jwt.decode()` and `jwt.encode()` call. Verify each call site pins a single algorithm family and uses the correct key type. Add explicit algorithm restrictions where missing."
     },
     "security_vulnerability": {
       "severity": "high",

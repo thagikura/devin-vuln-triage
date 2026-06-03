@@ -52,7 +52,7 @@ def verify_github_signature(payload_body: bytes, signature: str | None) -> bool:
 async def process_alert(alert_data: VulnerabilityAlert) -> dict:
     """Core pipeline: classify → dispatch Devin (fixable) or create issue (no fix).
 
-    - simple_bump / breaking_change: Devin creates a PR directly
+    - simple_bump / breaking_change / code_audit: Devin creates a PR directly
     - no_fix: Creates a GitHub Issue to escalate to a human engineer
     """
     triage = classify(alert_data)
@@ -65,7 +65,11 @@ async def process_alert(alert_data: VulnerabilityAlert) -> dict:
 
     from app.models import TriageCategory as TC
 
-    is_fixable = triage.category in (TC.SIMPLE_BUMP, TC.BREAKING_CHANGE)
+    is_fixable = triage.category in (
+        TC.SIMPLE_BUMP,
+        TC.BREAKING_CHANGE,
+        TC.CODE_AUDIT,
+    )
 
     db = SessionLocal()
     try:
@@ -236,6 +240,10 @@ async def simulate(request: Request):
         alert_data = parse_dependabot_payload(payload)
         if not alert_data:
             raise HTTPException(status_code=400, detail="Could not parse payload")
+        # Support category_override from _meta (for code_audit alerts)
+        meta = payload.get("_meta", {})
+        if meta.get("category_override"):
+            alert_data.category_override = meta["category_override"]
     else:
         try:
             alert_data = VulnerabilityAlert(**payload)

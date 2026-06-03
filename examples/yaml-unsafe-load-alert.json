@@ -1,0 +1,34 @@
+{
+  "action": "created",
+  "alert": {
+    "number": 102,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "ecosystem": "pip",
+        "name": "yaml.load (unsafe deserialization)"
+      },
+      "manifest_path": "superset/examples/utils.py"
+    },
+    "security_advisory": {
+      "ghsa_id": "CODE-AUDIT-002",
+      "cve_id": "CWE-502",
+      "summary": "Unsafe YAML loading with yaml.Loader in examples/utils.py",
+      "severity": "medium",
+      "permalink": "https://cwe.mitre.org/data/definitions/502.html",
+      "description": "The codebase uses `yaml.load(contents, Loader=yaml.Loader)` in `superset/examples/utils.py:261` instead of the safe alternative `yaml.safe_load()`. The `yaml.Loader` class can deserialize arbitrary Python objects, enabling code execution if the YAML input is attacker-controlled.\n\n**Known instance:**\n- `superset/examples/utils.py:261` — `yaml.load(contents.get(METADATA_FILE_NAME, '{}'), Loader=yaml.Loader)` with `# noqa: S506` suppression\n\n**Fix approach:**\n1. Replace `yaml.load(..., Loader=yaml.Loader)` with `yaml.safe_load(...)` \n2. Verify that the YAML content being loaded does not use custom Python types (custom constructors, !!python/object tags, etc.)\n3. If custom types ARE used, create an explicit safe loader that only allows the needed types\n4. Remove the `# noqa: S506` comment since the fix resolves the security issue\n5. Search for any other `yaml.load()` calls across the codebase (including tests and migrations)\n\nThis is a CODE-LEVEL fix — the yaml library itself is not vulnerable; the insecure usage pattern is the issue."
+    },
+    "security_vulnerability": {
+      "severity": "medium",
+      "vulnerable_version_range": "N/A",
+      "first_patched_version": null
+    }
+  },
+  "repository": {
+    "full_name": "thagikura/superset-fork"
+  },
+  "_meta": {
+    "category_override": "code_audit",
+    "note": "Code-level finding. The yaml library is fine; the usage pattern is insecure."
+  }
+}

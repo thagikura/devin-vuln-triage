@@ -11,15 +11,16 @@
       "manifest_path": "requirements/base.txt"
     },
     "security_advisory": {
-      "ghsa_id": "GHSA-flask-2026",
+      "ghsa_id": "GHSA-68rp-wp8r-4726",
       "cve_id": "CVE-2026-27205",
-      "summary": "Flask session Vary: Cookie bypass allows cache poisoning",
+      "summary": "Flask session does not add Vary: Cookie header when accessed in some ways",
       "severity": "medium",
-      "permalink": "https://github.com/advisories/GHSA-flask-2026"
+      "permalink": "https://github.com/advisories/GHSA-68rp-wp8r-4726",
+      "description": "Flask 2.x does not set the `Vary: Cookie` header when the session is accessed via `in`, `len`, or other non-read methods. This allows caches to serve responses that include session-specific data to other users.\n\nThe fix requires upgrading to Flask 3.1.3+, which is a MAJOR version bump (2.x → 3.x) with significant breaking changes.\n\n**Breaking changes in Flask 3.x to watch for:**\n- `flask.escape()` removed — use `markupsafe.escape()` instead\n- `flask.Markup` removed — use `markupsafe.Markup` instead\n- `flask.json.JSONEncoder` / `JSONDecoder` removed — use `flask.json.provider` or standard json\n- `app.json_encoder` attribute removed — use `app.json_provider_class`\n- `flask.json.htmlsafe_dumps()` removed\n- Session interface changes: `open_session()` / `save_session()` signatures changed\n- Blueprint changes: `register()` method signature changed\n- `Request.is_xhr` removed (was already deprecated)\n- Minimum Werkzeug version bumped to 3.0+\n\n**This codebase has 229 files importing from flask.** A thorough migration is required."
     },
     "security_vulnerability": {
       "severity": "medium",
-      "vulnerable_version_range": ">= 2.0.0, < 3.1.3",
+      "vulnerable_version_range": "< 3.1.3",
       "first_patched_version": {
         "identifier": "3.1.3"
       }

@@ -4,46 +4,50 @@ Event-driven security vulnerability auto-triage using the [Devin API](https://do
 
 ## Problem
 
-Dependabot finds vulnerabilities but someone still has to fix them. For large codebases like [Apache Superset](https://github.com/apache/superset), security alerts pile up and require different handling depending on severity and fix complexity. This system automates the entire remediation pipeline.
+Dependabot finds vulnerabilities and can bump version numbers, but it can't reason about **how a vulnerability affects your code**. For large codebases like [Apache Superset](https://github.com/apache/superset), security alerts require different handling: some need code audits, some need full API migrations, and some need human judgment. This system automates the entire remediation pipeline — going beyond version bumps to deliver codebase-aware fixes.
 
 ## How It Works
 
 ```
 GitHub Dependabot        Webhook Listener        Triage Classifier
-(automatic scanning)  →  (FastAPI)            →  (simple/breaking/no-fix)
-                                                       │
-                              ┌─────────────────────────┤
-                              │                         │
-                    Fix available?              No fix available?
-                              │                         │
-                              ▼                         ▼
-                  Devin Session Dispatcher     GitHub Issue Creator
-                  → Creates PR via Devin API   → Escalates to human engineer
-                              │
-                              ▼
-                  Session Monitor ──→ Polls status, tracks PRs
-                              │
-                              ▼
-                  CLI / Dashboard ──→ Pipeline metrics & alert status
+(automatic scanning)  →  (FastAPI)            →  (4 categories)
+     +                                              │
+Static Analysis                  ┌───────────┬──────┴──────┬───────────┐
+(code-level findings)            │           │             │           │
+                          simple_bump  breaking_change  code_audit   no_fix
+                                 │           │             │           │
+                                 ▼           ▼             ▼           ▼
+                            Devin: bump  Devin: full   Devin: fix  GitHub Issue
+                            + audit      migration     code        → human
+                            + harden     + test        patterns    escalation
+                                 │           │             │
+                                 └─────────┬─┘─────────────┘
+                                           ▼
+                              Session Monitor ──→ Polls status, tracks PRs
+                                           ▼
+                              CLI / Dashboard ──→ Pipeline metrics
 ```
 
 ### Triage Categories
 
-| Category | Criteria | Action |
-|----------|----------|--------|
-| **simple_bump** | Fix exists, same major version | **Devin creates PR** — bumps version, runs tests |
-| **breaking_change** | Fix exists, different major version | **Devin creates PR** — bumps version, checks CHANGELOG, updates code, documents migrations |
-| **no_fix** | No fix available | **Creates GitHub Issue** — escalates to human engineer for risk assessment |
+| Category | Criteria | Devin's Action | Why Dependabot Can't |
+|----------|----------|----------------|---------------------|
+| **simple_bump** | Fix exists, same major version | Bump version + **audit codebase** for the vulnerable pattern + harden code + add tests | Dependabot only changes the version number |
+| **breaking_change** | Fix exists, different major version | Full migration: read CHANGELOG, inventory all API usage, update imports/code, fix tests | Dependabot can't handle breaking API changes |
+| **code_audit** | Insecure code pattern (not a version issue) | Find all instances of the pattern, replace with safe alternative, ensure backward compatibility | Dependabot can't detect code-level issues |
+| **no_fix** | No fix available | **Creates GitHub Issue** — deep exposure analysis for human engineer | Both escalate, but Devin provides file:line analysis |
 
 ### Real Vulnerabilities (from Apache Superset)
 
-| Package | Current | Fix | Category |
-|---------|---------|-----|----------|
-| `pyjwt` | 2.12.0 | 2.13.0 | simple_bump |
-| `flask` | 2.3.3 | 3.1.3 | breaking_change |
-| `pyarrow` | 20.0.0 | 23.0.1 | breaking_change |
-| `paramiko` | 3.5.1 | — | no_fix |
-| `eslint-plugin-i18n-strings` | * | — | no_fix (malware) |
+| Package | Category | What Devin Does (Beyond Dependabot) |
+|---------|----------|-------------------------------------|
+| **pyjwt** 2.12→2.13 | simple_bump | Bumps version + audits 3 `jwt.decode()` call sites for key confusion vulnerability + verifies algorithm pinning on guest token flow |
+| **flask** 2.3→3.1 | breaking_change | Migrates 229 files importing Flask: fixes removed `escape()`, updates JSON encoder patterns, handles session API changes |
+| **pyarrow** 20→23 | breaking_change | Audits 10 files using `pa.Table`/`pa.Array`/`pa.types`, migrates deprecated APIs across 3 major versions |
+| **pickle.loads** | code_audit | Replaces unsafe `PickleKeyValueCodec` with JSON alternative, updates `metastore_cache.py` default codec |
+| **yaml.load** | code_audit | Replaces `yaml.Loader` with `yaml.safe_load()`, removes `# noqa: S506` suppression |
+| **paramiko** (SHA-1) | no_fix | Creates GitHub Issue with exposure analysis: traces `RSAKey` usage in SSH tunneling, assesses production reachability |
+| **eslint-plugin-i18n-strings** | no_fix | Creates GitHub Issue noting this is a local `file:` package (not the malicious npm one), recommends renaming |
 
 ## Quick Start
 
@@ -73,17 +77,22 @@ The server starts at `http://localhost:8000`.
 ### Simulate a Dependabot Alert
 
 ```bash
-# Simple version bump (pyjwt)
+# Simple bump + audit (pyjwt — audits jwt.decode() call sites)
 curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
   -d @examples/pyjwt-alert.json
 
-# Breaking change (flask 2.x → 3.x)
+# Breaking change migration (flask 2.x → 3.x — 229 files)
 curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
   -d @examples/flask-alert.json
 
-# No fix available (paramiko)
+# Code audit (pickle.loads — fix insecure deserialization pattern)
+curl -X POST http://localhost:8000/simulate \
+  -H "Content-Type: application/json" \
+  -d @examples/pickle-deserialization-alert.json
+
+# No fix available (paramiko — human escalation)
 curl -X POST http://localhost:8000/simulate \
   -H "Content-Type: application/json" \
   -d @examples/paramiko-alert.json
