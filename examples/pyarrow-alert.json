@@ -13,13 +13,14 @@
     "security_advisory": {
       "ghsa_id": "GHSA-pyarrow-2026",
       "cve_id": "PYSEC-2026-113",
-      "summary": "Use After Free in Apache Arrow C++ IPC reader",
+      "summary": "PyArrow Use After Free in IPC reader with pre-buffering",
       "severity": "medium",
-      "permalink": "https://github.com/advisories/GHSA-pyarrow-2026"
+      "permalink": "https://osv.dev/vulnerability/PYSEC-2026-113",
+      "description": "PyArrow prior to 23.0.1 contains a Use After Free vulnerability in the IPC file reader when pre-buffering is enabled. This can lead to memory corruption or crashes.\n\nUpgrade from 20.0.0 → 23.0.1 is a MAJOR version bump (3 major versions). Known breaking changes:\n\n**API changes to audit:**\n- `pa.Table` / `pa.Array` constructor changes\n- `pa.types` validation functions may have stricter behavior\n- `pa.timestamp()` timezone handling changes\n- `pyarrow.parquet` read/write API changes\n- `ArrowException` hierarchy changes\n- Deprecated APIs removed between 20.x and 23.x\n\n**This codebase uses pyarrow extensively in:**\n- `superset/result_set.py` — Core result set processing (pa.Table, pa.Array, pa.types)\n- `superset/sqllab/utils.py` — SQL Lab result handling\n- `superset/views/utils.py` — View utilities\n- `superset/db_engine_specs/hive.py` — Hive engine with pyarrow.parquet\n- `superset/commands/database/uploaders/columnar_reader.py` — Columnar file uploads\n- `superset/semantic_layers/` — Semantic layer models and mappers\n\nAll usage sites must be audited for compatibility with pyarrow 23.x."
     },
     "security_vulnerability": {
       "severity": "medium",
-      "vulnerable_version_range": ">= 15.0.0, < 23.0.1",
+      "vulnerable_version_range": "< 23.0.1",
       "first_patched_version": {
         "identifier": "23.0.1"
       }

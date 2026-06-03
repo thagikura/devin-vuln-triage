@@ -14,7 +14,7 @@ from app.dashboard import get_alert_list, get_metrics
 from app.dispatcher import build_prompt, create_devin_session
 from app.github_client import create_tracking_issue
 from app.models import Alert, AlertStatus, SessionLocal, SessionLog, init_db
-from app.monitor import start_monitoring
+from app.monitor import resume_all_active, start_monitoring
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -26,6 +26,7 @@ templates = Jinja2Templates(directory="templates")
 async def lifespan(app: FastAPI):
     init_db()
     logger.info("Database initialized")
+    await resume_all_active()
     yield
 
 
@@ -52,7 +53,8 @@ def verify_github_signature(payload_body: bytes, signature: str | None) -> bool:
 async def process_alert(alert_data: VulnerabilityAlert) -> dict:
     """Core pipeline: classify → dispatch Devin (fixable) or create issue (no fix).
 
-    - simple_bump / breaking_change: Devin creates a PR directly
+    - simple_bump / breaking_change / code_audit / library_replacement:
+      Devin creates a PR directly
     - no_fix: Creates a GitHub Issue to escalate to a human engineer
     """
     triage = classify(alert_data)
@@ -65,7 +67,12 @@ async def process_alert(alert_data: VulnerabilityAlert) -> dict:
 
     from app.models import TriageCategory as TC
 
-    is_fixable = triage.category in (TC.SIMPLE_BUMP, TC.BREAKING_CHANGE)
+    is_fixable = triage.category in (
+        TC.SIMPLE_BUMP,
+        TC.BREAKING_CHANGE,
+        TC.CODE_AUDIT,
+        TC.LIBRARY_REPLACEMENT,
+    )
 
     db = SessionLocal()
     try:
@@ -236,6 +243,12 @@ async def simulate(request: Request):
         alert_data = parse_dependabot_payload(payload)
         if not alert_data:
             raise HTTPException(status_code=400, detail="Could not parse payload")
+        # Support overrides from _meta (for code_audit / library_replacement alerts)
+        meta = payload.get("_meta", {})
+        if meta.get("category_override"):
+            alert_data.category_override = meta["category_override"]
+        if meta.get("alternative_package"):
+            alert_data.alternative_package = meta["alternative_package"]
     else:
         try:
             alert_data = VulnerabilityAlert(**payload)

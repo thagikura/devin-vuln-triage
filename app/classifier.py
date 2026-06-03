@@ -21,6 +21,9 @@ class VulnerabilityAlert(BaseModel):
     cve_ids: list[str] = []
     advisory_url: str | None = None
     summary: str = ""
+    vuln_description: str = ""
+    category_override: str | None = None
+    alternative_package: str | None = None
 
 
 class TriageResult(BaseModel):
@@ -33,9 +36,47 @@ class TriageResult(BaseModel):
     severity: str
     advisory_url: str | None
     recommended_action: str
+    vuln_description: str = ""
+    alternative_package: str | None = None
 
 
 def classify(alert: VulnerabilityAlert) -> TriageResult:
+    if alert.category_override == "library_replacement":
+        return TriageResult(
+            category=TriageCategory.LIBRARY_REPLACEMENT,
+            package_name=alert.package_name,
+            ecosystem=alert.ecosystem,
+            current_version=alert.current_version,
+            fix_version=alert.fix_version,
+            cve_ids=alert.cve_ids,
+            severity=alert.severity,
+            advisory_url=alert.advisory_url,
+            recommended_action=(
+                f"Replace {alert.package_name} with "
+                f"{alert.alternative_package or 'a safer alternative'}. "
+                "Migrate all usages and ensure tests pass."
+            ),
+            vuln_description=alert.vuln_description,
+            alternative_package=alert.alternative_package,
+        )
+
+    if alert.category_override == "code_audit":
+        return TriageResult(
+            category=TriageCategory.CODE_AUDIT,
+            package_name=alert.package_name,
+            ecosystem=alert.ecosystem,
+            current_version=alert.current_version,
+            fix_version=alert.fix_version,
+            cve_ids=alert.cve_ids,
+            severity=alert.severity,
+            advisory_url=alert.advisory_url,
+            recommended_action=(
+                f"Code-level fix required for {alert.package_name}. "
+                "Audit the codebase for the insecure pattern and remediate."
+            ),
+            vuln_description=alert.vuln_description,
+        )
+
     if not alert.fix_version:
         return TriageResult(
             category=TriageCategory.NO_FIX,
@@ -50,6 +91,7 @@ def classify(alert: VulnerabilityAlert) -> TriageResult:
                 f"No fix available for {alert.package_name}. "
                 "Investigate codebase exposure, assess risk, and recommend workarounds."
             ),
+            vuln_description=alert.vuln_description,
         )
 
     try:
@@ -69,6 +111,7 @@ def classify(alert: VulnerabilityAlert) -> TriageResult:
                 f"Upgrade {alert.package_name} from {alert.current_version} "
                 f"to {alert.fix_version}. Version comparison failed — treat as breaking change."
             ),
+            vuln_description=alert.vuln_description,
         )
 
     if current.major == fix.major:
@@ -85,6 +128,7 @@ def classify(alert: VulnerabilityAlert) -> TriageResult:
                 f"Bump {alert.package_name} from {alert.current_version} "
                 f"to {alert.fix_version} (same major version)."
             ),
+            vuln_description=alert.vuln_description,
         )
 
     return TriageResult(
@@ -164,4 +208,5 @@ def parse_dependabot_payload(payload: dict) -> VulnerabilityAlert | None:
         cve_ids=cve_ids,
         advisory_url=advisory.get("permalink", ""),
         summary=advisory.get("summary", ""),
+        vuln_description=advisory.get("description", ""),
     )

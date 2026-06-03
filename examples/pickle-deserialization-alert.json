@@ -1,0 +1,34 @@
+{
+  "action": "created",
+  "alert": {
+    "number": 101,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "ecosystem": "pip",
+        "name": "pickle.loads (unsafe deserialization)"
+      },
+      "manifest_path": "superset/key_value/types.py"
+    },
+    "security_advisory": {
+      "ghsa_id": "CODE-AUDIT-001",
+      "cve_id": "CWE-502",
+      "summary": "Unsafe pickle deserialization in PickleKeyValueCodec",
+      "severity": "high",
+      "permalink": "https://cwe.mitre.org/data/definitions/502.html",
+      "description": "The codebase uses `pickle.loads()` in `PickleKeyValueCodec` (superset/key_value/types.py:85) to deserialize data from the key-value store. Pickle deserialization of untrusted data can lead to arbitrary code execution (CWE-502).\n\n**Known instances:**\n- `superset/key_value/types.py:85` — `PickleKeyValueCodec.decode()` calls `pickle.loads(value)`\n- `superset/extensions/metastore_cache.py` — uses `PickleKeyValueCodec` as default codec, already has a warning log about safety\n- A migration already exists (`9c2a5681ddfd`) that partially migrated from pickle to JSON, but `PickleKeyValueCodec` class still exists and is importable\n\n**Fix approach:**\n1. Replace `PickleKeyValueCodec` usage with `JsonKeyValueCodec` in all production code paths\n2. Add deprecation warning to `PickleKeyValueCodec` class\n3. Ensure `metastore_cache.py` defaults to `JsonKeyValueCodec` instead of `PickleKeyValueCodec`\n4. Add a runtime check that raises an error if pickle codec is used with untrusted data sources\n\nThis is a CODE-LEVEL fix — no version bump resolves this. Dependabot cannot detect or fix this pattern."
+    },
+    "security_vulnerability": {
+      "severity": "high",
+      "vulnerable_version_range": "N/A",
+      "first_patched_version": null
+    }
+  },
+  "repository": {
+    "full_name": "thagikura/superset-fork"
+  },
+  "_meta": {
+    "category_override": "code_audit",
+    "note": "This is a code-level finding, not a dependency version issue. The category_override field triggers CODE_AUDIT classification."
+  }
+}

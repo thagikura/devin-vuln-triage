@@ -23,6 +23,8 @@ class TriageCategory(str, Enum):
     SIMPLE_BUMP = "simple_bump"
     BREAKING_CHANGE = "breaking_change"
     NO_FIX = "no_fix"
+    CODE_AUDIT = "code_audit"
+    LIBRARY_REPLACEMENT = "library_replacement"
 
 
 class AlertStatus(str, Enum):

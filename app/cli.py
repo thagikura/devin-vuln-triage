@@ -5,6 +5,7 @@ Usage:
     python -m app.cli alerts          # Detailed alert list
     python -m app.cli logs <alert_id> # Audit log for a specific alert
     python -m app.cli simulate <file> # Send a simulated alert payload
+    python -m app.cli refresh         # Poll Devin API for all active sessions
 """
 
 import argparse
@@ -46,6 +47,8 @@ def print_status() -> None:
     print(f"  Simple Bumps:     {by_cat.get('simple_bump', 0)}")
     print(f"  Breaking Changes: {by_cat.get('breaking_change', 0)}")
     print(f"  No Fix Available: {by_cat.get('no_fix', 0)}")
+    print(f"  Code Audits:      {by_cat.get('code_audit', 0)}")
+    print(f"  Lib Replacements: {by_cat.get('library_replacement', 0)}")
     print("=" * 60)
     print()
 
@@ -122,6 +125,96 @@ def simulate(file_path: str, base_url: str = "http://localhost:8000") -> None:
     print(json.dumps(resp.json(), indent=2))
 
 
+def refresh_sessions() -> None:
+    """Poll the Devin API for all active sessions and update DB."""
+    import asyncio
+    import datetime
+
+    from app.dispatcher import get_devin_session
+    from app.models import Alert, AlertStatus
+
+    init_db()
+    db = SessionLocal()
+    try:
+        active = (
+            db.query(Alert)
+            .filter(
+                Alert.status.in_([
+                    AlertStatus.DISPATCHED.value,
+                    AlertStatus.RUNNING.value,
+                ]),
+                Alert.devin_session_id.isnot(None),
+            )
+            .all()
+        )
+        if not active:
+            print("No active sessions to refresh.")
+            return
+
+        print(f"Refreshing {len(active)} active session(s)...")
+        print()
+
+        for alert in active:
+            try:
+                data = asyncio.run(
+                    get_devin_session(alert.devin_session_id)
+                )
+            except Exception as e:
+                print(
+                    f"  {alert.package_name}: "
+                    f"error polling ({e})"
+                )
+                continue
+
+            status = data.get("status", "unknown")
+            pr_urls = data.get("pull_request_urls", [])
+            pr_url = pr_urls[0] if pr_urls else None
+
+            if status in ("exit", "finished"):
+                alert.status = AlertStatus.REMEDIATED.value
+                alert.pr_url = pr_url
+                alert.resolved_at = datetime.datetime.utcnow()
+                alert.updated_at = datetime.datetime.utcnow()
+                db.add(
+                    SessionLog(
+                        alert_id=alert.id,
+                        event="session_completed",
+                        details=json.dumps(
+                            {"status": status, "pr_url": pr_url}
+                        ),
+                    )
+                )
+            elif status in ("error", "failed", "stopped"):
+                error_msg = data.get("error", status)
+                alert.status = AlertStatus.FAILED.value
+                alert.error_message = str(error_msg)
+                alert.updated_at = datetime.datetime.utcnow()
+                db.add(
+                    SessionLog(
+                        alert_id=alert.id,
+                        event="session_failed",
+                        details=json.dumps(
+                            {"status": status, "error": str(error_msg)}
+                        ),
+                    )
+                )
+            elif status == "running":
+                alert.status = AlertStatus.RUNNING.value
+                alert.updated_at = datetime.datetime.utcnow()
+
+            db.commit()
+            pr_info = f"PR: {pr_url}" if pr_url else ""
+            print(
+                f"  {alert.package_name:<25} "
+                f"{status:<12} {pr_info}"
+            )
+
+        print()
+        print("Done. Run 'python -m app.cli status' to see updated state.")
+    finally:
+        db.close()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Devin Vuln Triage CLI")
     subparsers = parser.add_subparsers(dest="command")
@@ -136,6 +229,11 @@ def main() -> None:
     sim_parser.add_argument("file", help="Path to JSON payload file")
     sim_parser.add_argument("--url", default="http://localhost:8000", help="Server base URL")
 
+    subparsers.add_parser(
+        "refresh",
+        help="Poll Devin API for all active sessions and update DB",
+    )
+
     args = parser.parse_args()
 
     if args.command == "status":
@@ -146,6 +244,8 @@ def main() -> None:
         print_logs(args.alert_id)
     elif args.command == "simulate":
         simulate(args.file, args.url)
+    elif args.command == "refresh":
+        refresh_sessions()
     else:
         parser.print_help()
 
