@@ -1,4 +1,5 @@
 import logging
+import re
 
 from packaging.version import InvalidVersion, Version
 from pydantic import BaseModel
@@ -103,6 +104,25 @@ def classify(alert: VulnerabilityAlert) -> TriageResult:
     )
 
 
+_VERSION_RE = re.compile(r"(\d+\.\d+[\.\d]*)")
+
+
+def _extract_lower_bound(version_range: str) -> str:
+    """Extract the lower-bound version from a vulnerable_version_range string.
+
+    Examples: ">= 2.0.0, < 2.13.0" → "2.0.0", "< 3.1.3" → "unknown"
+    """
+    if not version_range:
+        return "unknown"
+    parts = [p.strip() for p in version_range.split(",")]
+    for part in parts:
+        if ">=" in part:
+            m = _VERSION_RE.search(part)
+            if m:
+                return m.group(1)
+    return "unknown"
+
+
 def parse_dependabot_payload(payload: dict) -> VulnerabilityAlert | None:
     """Parse a GitHub dependabot_alert webhook payload into a VulnerabilityAlert."""
     action = payload.get("action")
@@ -130,7 +150,7 @@ def parse_dependabot_payload(payload: dict) -> VulnerabilityAlert | None:
     if ghsa_id:
         cve_ids.append(ghsa_id)
 
-    current_version = "unknown"
+    current_version = _extract_lower_bound(vuln.get("vulnerable_version_range", ""))
 
     return VulnerabilityAlert(
         alert_number=alert_data.get("number", 0),

@@ -1,6 +1,6 @@
 import json
 
-from app.classifier import parse_dependabot_payload
+from app.classifier import _extract_lower_bound, parse_dependabot_payload
 
 
 def test_parse_created_alert():
@@ -12,6 +12,7 @@ def test_parse_created_alert():
     assert alert.package_name == "pyjwt"
     assert alert.ecosystem == "pip"
     assert alert.fix_version == "2.13.0"
+    assert alert.current_version == "2.0.0"
     assert alert.severity == "high"
     assert alert.repo == "thagikura/superset-fork"
     assert "PYSEC-2026-179" in alert.cve_ids
@@ -52,3 +53,11 @@ def test_parse_breaking_change_alert():
     assert alert is not None
     assert alert.package_name == "flask"
     assert alert.fix_version == "3.1.3"
+    assert alert.current_version == "2.0.0"
+
+
+def test_extract_lower_bound():
+    assert _extract_lower_bound(">= 2.0.0, < 2.13.0") == "2.0.0"
+    assert _extract_lower_bound(">= 20.0.0, < 23.0.1") == "20.0.0"
+    assert _extract_lower_bound("< 3.1.3") == "unknown"
+    assert _extract_lower_bound("") == "unknown"
