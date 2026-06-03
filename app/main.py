@@ -252,8 +252,9 @@ async def dashboard(request: Request):
     metrics = get_metrics()
     alerts = get_alert_list()
     return templates.TemplateResponse(
+        request,
         "dashboard.html",
-        {"request": request, "metrics": metrics, "alerts": alerts},
+        {"metrics": metrics, "alerts": alerts},
     )
 
 
