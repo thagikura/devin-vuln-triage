@@ -49,7 +49,7 @@ GitHub Dependabot        Webhook Listener        Triage Classifier
 | `flask` | 2.3.3 | 3.1.3 | breaking_change | [**PR #22**](https://github.com/thagikura/superset-fork/pull/22) — migrates removed `escape()`, JSON encoder changes across 229 files |
 | `simplejson` | * | — | library_replacement | [**PR #26**](https://github.com/thagikura/superset-fork/pull/26) — replaces `simplejson` with stdlib `json`, migrates `DashboardEncoder` |
 | `pyarrow` | 20.0.0 | 23.0.1 | breaking_change | [**PR #21**](https://github.com/thagikura/superset-fork/pull/21) — audits `pa.Table`/`pa.Array` usage across 10 files |
-| `pyjwt` | 2.12.0 | 2.13.0 | simple_bump | Bumps version + audits `jwt.decode()` call sites for key confusion vulnerability |
+| `pyjwt` | 2.12.0 | 2.13.0 | simple_bump | [**PR #28**](https://github.com/thagikura/superset-fork/pull/28) — bumps version + audits 7 JWT call sites, adds `_validate_guest_token_algorithm()` defense, writes 3 regression tests |
 | `paramiko` | 3.5.1 | — | no_fix | [**Issue #23**](https://github.com/thagikura/superset-fork/issues/23) — human escalation with exposure analysis |
 
 ## Quick Start
@@ -327,6 +327,98 @@ devin-vuln-triage/
 ├── docker-compose.yml
 └── .env.example
 ```
+
+## Future Extensions
+
+The current system handles Dependabot alerts end-to-end. Below are natural extension points, roughly ordered by impact:
+
+### 1. Broader Alert Sources
+
+The pipeline currently accepts only GitHub Dependabot `dependabot_alert` webhooks. The classifier and dispatcher are source-agnostic — any JSON payload that maps to `(package, version, severity, fix_version)` can flow through the same pipeline.
+
+| Source | Alert Type | Integration Point |
+|--------|-----------|-------------------|
+| **[CodeQL](https://docs.github.com/en/code-scanning)** | Code quality & security patterns | New webhook handler at `/webhook/codeql` → maps findings to `code_audit` category |
+| **[Semgrep](https://semgrep.dev/)** / **[Bandit](https://bandit.readthedocs.io/)** | Static analysis (SAST) | CLI or CI output → parse and POST to `/simulate` |
+| **[Snyk](https://snyk.io/)** / **[Socket](https://socket.dev/)** | Supply chain & license risks | Webhook integration similar to Dependabot |
+| **[OSV-Scanner](https://google.github.io/osv-scanner/)** | Multi-ecosystem vulnerability scanning | Pipe `osv-scanner --json` output into the pipeline |
+
+The `code_audit` triage category already exists for this — it just needs a webhook adapter per source.
+
+### 2. Confidence-Based Auto-Merge
+
+Instead of every PR requiring human review, use accumulated signals to auto-merge low-risk fixes:
+
+```
+                    ┌──────────────┐
+                    │  Devin PR    │
+                    └──────┬───────┘
+                           │
+                    ┌──────▼───────┐
+                    │  Signal      │
+                    │  Aggregator  │
+                    └──────┬───────┘
+                           │
+              ┌────────────┼────────────┐
+              │            │            │
+         CI passes?   Category?    Historical
+              │            │       acceptance
+              │            │         rate?
+              ▼            ▼            ▼
+         ┌─────────────────────────────────┐
+         │  Merge Policy Engine            │
+         │                                 │
+         │  AUTO-MERGE if ALL:             │
+         │  • category = simple_bump       │
+         │  • CI green                     │
+         │  • acceptance rate ≥ 90%        │
+         │  • no new security warnings     │
+         │                                 │
+         │  REQUIRE REVIEW otherwise       │
+         └─────────────────────────────────┘
+```
+
+**Implementation path:** Add a `merge_policy` table tracking historical PR outcomes (merged/rejected/reverted) per category. After Devin's PR passes CI, query the policy engine. If confidence thresholds are met, call `PUT /repos/{owner}/{repo}/pulls/{number}/merge` automatically.
+
+### 3. Static Analysis as Alert Source (`/scan` endpoint)
+
+Add an endpoint that runs static analysis against the target repo and feeds findings into the pipeline:
+
+```bash
+# Scan the target repo for insecure code patterns
+curl -X POST http://localhost:8000/scan \
+  -H "Content-Type: application/json" \
+  -d '{"repo": "thagikura/superset-fork", "tool": "bandit"}'
+```
+
+This would clone the repo, run `bandit -r . -f json`, parse the output, and create `code_audit` alerts for each finding. Devin then fixes the code patterns autonomously — something no dependency scanner can do.
+
+### 4. Multi-Repo Support
+
+Currently `TARGET_REPO` is a single repository. To support an entire GitHub org:
+
+- Accept the repo from the webhook payload's `repository.full_name` field (already parsed)
+- Remove the `TARGET_REPO` default and let each alert self-identify its repo
+- Add per-repo configuration (e.g., which branches to target, custom merge policies)
+
+### 5. Push-Based Session Tracking
+
+The current monitor polls `GET /sessions/{id}` with exponential backoff. When the Devin API adds webhook/callback support:
+
+- Register a callback URL when creating sessions (`POST /sessions` with `callback_url`)
+- Replace the polling loop with a `/webhook/devin` endpoint that receives session completion events
+- Eliminates API load and reduces status update latency from minutes to seconds
+
+### 6. Notification Integrations
+
+Alert stakeholders when the pipeline takes action:
+
+| Event | Channel | Message |
+|-------|---------|---------|
+| PR created | Slack / Teams | "Devin created PR #22 for Flask 2→3 migration" |
+| `no_fix` escalation | Slack / PagerDuty | "@security-team: paramiko has no fix — needs human review" |
+| Auto-merge triggered | Slack | "Auto-merged pyjwt bump (PR #25) — CI green, 95% acceptance rate" |
+| Session failed | Slack / email | "Devin session failed for pyarrow upgrade — manual intervention needed" |
 
 ## Related Repositories
 
