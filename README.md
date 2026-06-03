@@ -304,6 +304,7 @@ python -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 cp .env.example .env        # then fill in DEVIN_API_TOKEN, DEVIN_ORG_ID, GITHUB_TOKEN
+mkdir -p data               # SQLite DB will be created here
 ```
 
 Run checks:
