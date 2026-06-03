@@ -50,7 +50,11 @@ def verify_github_signature(payload_body: bytes, signature: str | None) -> bool:
 
 
 async def process_alert(alert_data: VulnerabilityAlert) -> dict:
-    """Core pipeline: classify → create issue → dispatch Devin → monitor."""
+    """Core pipeline: classify → dispatch Devin (fixable) or create issue (no fix).
+
+    - simple_bump / breaking_change: Devin creates a PR directly
+    - no_fix: Creates a GitHub Issue to escalate to a human engineer
+    """
     triage = classify(alert_data)
     logger.info(
         "Classified %s as %s (fix: %s)",
@@ -58,6 +62,10 @@ async def process_alert(alert_data: VulnerabilityAlert) -> dict:
         triage.category.value,
         triage.fix_version,
     )
+
+    from app.models import TriageCategory as TC
+
+    is_fixable = triage.category in (TC.SIMPLE_BUMP, TC.BREAKING_CHANGE)
 
     db = SessionLocal()
     try:
@@ -106,71 +114,69 @@ async def process_alert(alert_data: VulnerabilityAlert) -> dict:
         )
         db.commit()
 
-        # Create GitHub tracking issue
-        try:
-            issue = await create_tracking_issue(triage, alert_data.repo)
-            db_alert.github_issue_number = issue["number"]
-            db_alert.github_issue_url = issue["url"]
-            db.add(
-                SessionLog(
-                    alert_id=db_alert.id,
-                    event="issue_created",
-                    details=json.dumps(issue),
+        if is_fixable:
+            # Fixable: dispatch Devin to create a PR directly (no issue needed)
+            try:
+                prompt = build_prompt(
+                    triage, alert_data.repo, alert_data.manifest_path
                 )
-            )
-            db.commit()
-        except Exception as e:
-            logger.error("Failed to create GitHub issue: %s", e)
-
-        # Dispatch Devin session
-        try:
-            prompt = build_prompt(triage, alert_data.repo, alert_data.manifest_path)
-            session = await create_devin_session(prompt)
-            db_alert.devin_session_id = session.get("session_id")
-            db_alert.devin_session_url = session.get("url")
-            db_alert.status = AlertStatus.DISPATCHED.value
-            db.add(
-                SessionLog(
-                    alert_id=db_alert.id,
-                    event="session_created",
-                    details=json.dumps(
-                        {
-                            "session_id": session.get("session_id"),
-                            "url": session.get("url"),
-                        }
-                    ),
-                )
-            )
-            db.commit()
-
-            # Update GitHub issue with session link
-            if db_alert.github_issue_number:
-                from app.github_client import comment_on_issue
-
-                try:
-                    await comment_on_issue(
-                        alert_data.repo,
-                        db_alert.github_issue_number,
-                        f"Devin session dispatched: {session.get('url')}",
+                session = await create_devin_session(prompt)
+                db_alert.devin_session_id = session.get("session_id")
+                db_alert.devin_session_url = session.get("url")
+                db_alert.status = AlertStatus.DISPATCHED.value
+                db.add(
+                    SessionLog(
+                        alert_id=db_alert.id,
+                        event="session_created",
+                        details=json.dumps(
+                            {
+                                "session_id": session.get("session_id"),
+                                "url": session.get("url"),
+                            }
+                        ),
                     )
-                except Exception as e:
-                    logger.warning("Failed to comment on issue: %s", e)
-
-            # Start background monitoring
-            await start_monitoring(db_alert.id)
-
-        except Exception as e:
-            logger.error("Failed to create Devin session: %s", e)
-            db_alert.status = AlertStatus.FAILED.value
-            db_alert.error_message = str(e)
-            db.add(
-                SessionLog(
-                    alert_id=db_alert.id,
-                    event="dispatch_failed",
-                    details=json.dumps({"error": str(e)}),
                 )
-            )
-            db.commit()
+                db.commit()
+
+                await start_monitoring(db_alert.id)
+
+            except Exception as e:
+                logger.error("Failed to create Devin session: %s", e)
+                db_alert.status = AlertStatus.FAILED.value
+                db_alert.error_message = str(e)
+                db.add(
+                    SessionLog(
+                        alert_id=db_alert.id,
+                        event="dispatch_failed",
+                        details=json.dumps({"error": str(e)}),
+                    )
+                )
+                db.commit()
+        else:
+            # No fix: escalate to human engineer via GitHub Issue
+            try:
+                issue = await create_tracking_issue(triage, alert_data.repo)
+                db_alert.github_issue_number = issue["number"]
+                db_alert.github_issue_url = issue["url"]
+                db_alert.status = AlertStatus.DISPATCHED.value
+                db.add(
+                    SessionLog(
+                        alert_id=db_alert.id,
+                        event="issue_created",
+                        details=json.dumps(issue),
+                    )
+                )
+                db.commit()
+                logger.info(
+                    "No fix available for %s — created issue %s for human review",
+                    triage.package_name,
+                    issue["url"],
+                )
+            except Exception as e:
+                logger.error("Failed to create GitHub issue: %s", e)
+                db_alert.status = AlertStatus.FAILED.value
+                db_alert.error_message = str(e)
+                db.commit()
 
         return {
             "status": "processed",

@@ -12,28 +12,28 @@ Dependabot finds vulnerabilities but someone still has to fix them. For large co
 GitHub Dependabot        Webhook Listener        Triage Classifier
 (automatic scanning)  →  (FastAPI)            →  (simple/breaking/no-fix)
                                                        │
-                         ┌─────────────────────────────┘
-                         │
-                         ▼
-                  GitHub Issue Creator ──→ Creates tracking issue in target repo
-                         │
-                         ▼
-                  Devin Session Dispatcher ──→ Creates Devin session via API
-                         │                     with category-specific prompt
-                         ▼
-                  Session Monitor ──→ Polls session status, updates issue
-                         │
-                         ▼
+                              ┌─────────────────────────┤
+                              │                         │
+                    Fix available?              No fix available?
+                              │                         │
+                              ▼                         ▼
+                  Devin Session Dispatcher     GitHub Issue Creator
+                  → Creates PR via Devin API   → Escalates to human engineer
+                              │
+                              ▼
+                  Session Monitor ──→ Polls status, tracks PRs
+                              │
+                              ▼
                   CLI / Dashboard ──→ Pipeline metrics & alert status
 ```
 
 ### Triage Categories
 
-| Category | Criteria | Devin Action |
-|----------|----------|--------------|
-| **simple_bump** | Fix exists, same major version | Bump version, run tests, create PR |
-| **breaking_change** | Fix exists, different major version | Bump version, check CHANGELOG, update code, create PR with migration notes |
-| **no_fix** | No fix available | Analyze exposure, write risk assessment, suggest workarounds |
+| Category | Criteria | Action |
+|----------|----------|--------|
+| **simple_bump** | Fix exists, same major version | **Devin creates PR** — bumps version, runs tests |
+| **breaking_change** | Fix exists, different major version | **Devin creates PR** — bumps version, checks CHANGELOG, updates code, documents migrations |
+| **no_fix** | No fix available | **Creates GitHub Issue** — escalates to human engineer for risk assessment |
 
 ### Real Vulnerabilities (from Apache Superset)
 
