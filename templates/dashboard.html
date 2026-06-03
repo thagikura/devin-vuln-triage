@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Devin Vulnerability Triage — Dashboard</title>
+    <meta http-equiv="refresh" content="30">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 24px; }
+        h1 { color: #f0f6fc; margin-bottom: 8px; font-size: 24px; }
+        .subtitle { color: #8b949e; margin-bottom: 24px; font-size: 14px; }
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 32px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 20px; }
+        .card .label { color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+        .card .value { font-size: 32px; font-weight: 700; color: #f0f6fc; }
+        .card.success .value { color: #3fb950; }
+        .card.warning .value { color: #d29922; }
+        .card.danger .value { color: #f85149; }
+        .card.info .value { color: #58a6ff; }
+        table { width: 100%; border-collapse: collapse; background: #161b22; border: 1px solid #30363d; border-radius: 8px; overflow: hidden; }
+        th { background: #21262d; color: #8b949e; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; padding: 12px 16px; text-align: left; }
+        td { padding: 12px 16px; border-top: 1px solid #21262d; font-size: 14px; }
+        tr:hover { background: #1c2128; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+        .badge-received { background: #1f6feb33; color: #58a6ff; }
+        .badge-dispatched { background: #d2992233; color: #d29922; }
+        .badge-running { background: #d2992233; color: #d29922; }
+        .badge-remediated { background: #3fb95033; color: #3fb950; }
+        .badge-failed { background: #f8514933; color: #f85149; }
+        .badge-simple_bump { background: #3fb95033; color: #3fb950; }
+        .badge-breaking_change { background: #d2992233; color: #d29922; }
+        .badge-no_fix { background: #f8514933; color: #f85149; }
+        .badge-critical { background: #f8514933; color: #f85149; }
+        .badge-high { background: #d9380b33; color: #f85149; }
+        .badge-medium { background: #d2992233; color: #d29922; }
+        .badge-moderate { background: #d2992233; color: #d29922; }
+        .badge-low { background: #3fb95033; color: #3fb950; }
+        a { color: #58a6ff; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .section-title { color: #f0f6fc; font-size: 18px; margin-bottom: 12px; margin-top: 8px; }
+        .empty { text-align: center; padding: 48px; color: #8b949e; }
+    </style>
+</head>
+<body>
+    <h1>Devin Vulnerability Triage</h1>
+    <p class="subtitle">Auto-refreshes every 30 seconds &bull; Powered by Devin API &bull; <a href="/api/metrics">JSON metrics</a></p>
+
+    <div class="cards">
+        <div class="card info">
+            <div class="label">Total Alerts</div>
+            <div class="value">{{ metrics.total_alerts_received }}</div>
+        </div>
+        <div class="card {% if metrics.sessions_by_status.get('running', 0) > 0 %}warning{% endif %}">
+            <div class="label">Active Sessions</div>
+            <div class="value">{{ metrics.sessions_by_status.get('running', 0) + metrics.sessions_by_status.get('dispatched', 0) }}</div>
+        </div>
+        <div class="card success">
+            <div class="label">PRs Created</div>
+            <div class="value">{{ metrics.prs_created }}</div>
+        </div>
+        <div class="card {% if metrics.success_rate >= 0.8 %}success{% elif metrics.success_rate >= 0.5 %}warning{% else %}danger{% endif %}">
+            <div class="label">Success Rate</div>
+            <div class="value">{{ (metrics.success_rate * 100)|round(0)|int }}%</div>
+        </div>
+        <div class="card">
+            <div class="label">Avg Resolution Time</div>
+            <div class="value">{{ (metrics.avg_time_to_resolution_seconds / 60)|round(1) }}m</div>
+        </div>
+        <div class="card danger">
+            <div class="label">Failed</div>
+            <div class="value">{{ metrics.sessions_by_status.get('failed', 0) }}</div>
+        </div>
+    </div>
+
+    <h2 class="section-title">Category Breakdown</h2>
+    <div class="cards" style="margin-bottom: 32px;">
+        <div class="card">
+            <div class="label">Simple Bumps</div>
+            <div class="value" style="color: #3fb950;">{{ metrics.sessions_by_category.get('simple_bump', 0) }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Breaking Changes</div>
+            <div class="value" style="color: #d29922;">{{ metrics.sessions_by_category.get('breaking_change', 0) }}</div>
+        </div>
+        <div class="card">
+            <div class="label">No Fix Available</div>
+            <div class="value" style="color: #f85149;">{{ metrics.sessions_by_category.get('no_fix', 0) }}</div>
+        </div>
+    </div>
+
+    <h2 class="section-title">Alerts</h2>
+    {% if alerts %}
+    <table>
+        <thead>
+            <tr>
+                <th>Package</th>
+                <th>Severity</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>CVEs</th>
+                <th>Fix</th>
+                <th>Issue</th>
+                <th>Devin Session</th>
+                <th>PR</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for alert in alerts %}
+            <tr>
+                <td><strong>{{ alert.package_name }}</strong><br><span style="color:#8b949e;font-size:12px;">{{ alert.ecosystem }}</span></td>
+                <td><span class="badge badge-{{ alert.severity }}">{{ alert.severity }}</span></td>
+                <td><span class="badge badge-{{ alert.category }}">{{ alert.category }}</span></td>
+                <td><span class="badge badge-{{ alert.status }}">{{ alert.status }}</span></td>
+                <td style="font-size:12px;">{{ alert.cve_ids|join(', ') if alert.cve_ids else 'N/A' }}</td>
+                <td>{{ alert.fix_version or '—' }}</td>
+                <td>{% if alert.github_issue_url %}<a href="{{ alert.github_issue_url }}" target="_blank">#{{ alert.github_alert_number }}</a>{% else %}—{% endif %}</td>
+                <td>{% if alert.devin_session_url %}<a href="{{ alert.devin_session_url }}" target="_blank">View</a>{% else %}—{% endif %}</td>
+                <td>{% if alert.pr_url %}<a href="{{ alert.pr_url }}" target="_blank">PR</a>{% else %}{% if alert.error_message %}<span style="color:#f85149;" title="{{ alert.error_message }}">Error</span>{% else %}—{% endif %}{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="empty">
+        <p>No alerts received yet.</p>
+        <p style="margin-top:8px;">Send a simulated alert: <code>curl -X POST http://localhost:8000/simulate -H "Content-Type: application/json" -d @examples/pyjwt-alert.json</code></p>
+    </div>
+    {% endif %}
+</body>
+</html>

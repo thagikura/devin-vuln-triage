@@ -1,0 +1,31 @@
+{
+  "action": "created",
+  "alert": {
+    "number": 1,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "ecosystem": "pip",
+        "name": "pyjwt"
+      },
+      "manifest_path": "requirements/base.txt"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-75c5-xw7c-p5pm",
+      "cve_id": "PYSEC-2026-179",
+      "summary": "PyJWT HMAC key confusion allows token forgery",
+      "severity": "high",
+      "permalink": "https://github.com/advisories/GHSA-75c5-xw7c-p5pm"
+    },
+    "security_vulnerability": {
+      "severity": "high",
+      "vulnerable_version_range": ">= 2.0.0, < 2.13.0",
+      "first_patched_version": {
+        "identifier": "2.13.0"
+      }
+    }
+  },
+  "repository": {
+    "full_name": "thagikura/superset-fork"
+  }
+}

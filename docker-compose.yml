@@ -1,0 +1,17 @@
+services:
+  triage:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DEVIN_API_TOKEN=${DEVIN_API_TOKEN}
+      - DEVIN_ORG_ID=${DEVIN_ORG_ID}
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_WEBHOOK_SECRET=${GITHUB_WEBHOOK_SECRET:-}
+      - TARGET_REPO=${TARGET_REPO:-thagikura/superset-fork}
+      - DATABASE_URL=sqlite:////data/triage.db
+    volumes:
+      - triage-data:/data
+
+volumes:
+  triage-data:
