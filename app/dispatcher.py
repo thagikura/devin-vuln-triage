@@ -239,11 +239,74 @@ unsafe path is no longer reachable or raises an error).
   - **Test results**.
 """
 
+PROMPT_LIBRARY_REPLACEMENT = """\
+You are a security engineer replacing a vulnerable library in {repo}.
+
+## Vulnerability
+
+| Field | Value |
+|-------|-------|
+| Package (remove) | {package_name} |
+| Replace with | {alternative_package} |
+| CVE(s) | {cve_ids} |
+| Severity | {severity} |
+| Ecosystem | {ecosystem} |
+| Manifest | {manifest_path} |
+
+{vuln_description}
+
+## Your task — Library Replacement
+
+There is no safe version of {package_name} available.  Instead of filing \
+an issue for a human to deal with, you will **replace it** with \
+{alternative_package} and prove the migration works.
+
+### Step 1: Understand the API surface of {package_name}
+- Search for every import and usage of {package_name} across the codebase.
+- For each call site, document: file, line, function/class, and how \
+the library is used (which API, what arguments, what return type).
+
+### Step 2: Research the replacement library
+- Read the docs for {alternative_package}.
+- Map each {package_name} API call to its {alternative_package} equivalent.
+- Identify any behavioral differences (defaults, exceptions, edge cases).
+
+### Step 3: Perform the migration
+- Remove {package_name} from all dependency files \
+(requirements/*.txt, pyproject.toml, setup.cfg, package.json, etc.).
+- Add {alternative_package} to the same dependency files.
+- For **every** call site found in Step 1:
+  - Update imports.
+  - Migrate API calls to {alternative_package} equivalents.
+  - Handle any behavioral differences.
+- Add inline comments where the migration is non-obvious.
+
+### Step 4: Test thoroughly
+- Run the full test suite.  Fix any failures.
+- If tests mock or patch {package_name}, update them to use \
+{alternative_package}.
+- If no tests exist for the affected code paths, add targeted tests.
+
+### Step 5: Create the PR
+- Title: `fix(security): replace {package_name} with \
+{alternative_package} ({cve_ids})`
+- PR body must include:
+  - **Why**: {package_name} has an unfixed vulnerability — \
+no patched version exists.
+  - **Migration map**: table of {package_name} API → {alternative_package} \
+API for every call site changed.
+  - **Files modified**: grouped by type of change.
+  - **Behavioral differences**: any subtle changes in behavior \
+(e.g. different defaults, changed exception types).
+  - **Test results**: paste or link output.
+"""
+
 PROMPTS = {
     TriageCategory.SIMPLE_BUMP: PROMPT_SIMPLE_BUMP,
     TriageCategory.BREAKING_CHANGE: PROMPT_BREAKING_CHANGE,
     TriageCategory.NO_FIX: PROMPT_NO_FIX,
     TriageCategory.CODE_AUDIT: PROMPT_CODE_AUDIT,
+    TriageCategory.LIBRARY_REPLACEMENT: PROMPT_LIBRARY_REPLACEMENT,
 }
 
 
@@ -259,6 +322,7 @@ def build_prompt(triage: TriageResult, repo: str, manifest_path: str | None = No
         manifest_path=manifest_path or "dependency files",
         advisory_url=triage.advisory_url or "N/A",
         vuln_description=triage.vuln_description or "",
+        alternative_package=triage.alternative_package or "(see description)",
     )
 
 

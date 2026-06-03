@@ -134,6 +134,45 @@ def test_vuln_description_propagated():
     assert result.vuln_description == desc
 
 
+def test_library_replacement_override():
+    alert = VulnerabilityAlert(
+        alert_number=201,
+        repo="thagikura/superset-fork",
+        package_name="simplejson",
+        ecosystem="pip",
+        current_version="3.19.1",
+        fix_version=None,
+        severity="high",
+        cve_ids=["CVE-2026-99001"],
+        category_override="library_replacement",
+        alternative_package="json (Python stdlib)",
+        vuln_description="Replace simplejson with stdlib json.",
+    )
+    result = classify(alert)
+    assert result.category == TriageCategory.LIBRARY_REPLACEMENT
+    assert result.alternative_package == "json (Python stdlib)"
+    assert "simplejson" in result.recommended_action
+
+
+def test_library_replacement_takes_precedence_over_no_fix():
+    """library_replacement override takes precedence even with no fix_version."""
+    alert = VulnerabilityAlert(
+        alert_number=202,
+        repo="test/repo",
+        package_name="some-pkg",
+        ecosystem="pip",
+        current_version="1.0.0",
+        fix_version=None,
+        severity="medium",
+        cve_ids=[],
+        category_override="library_replacement",
+        alternative_package="better-pkg",
+    )
+    result = classify(alert)
+    assert result.category == TriageCategory.LIBRARY_REPLACEMENT
+    assert result.alternative_package == "better-pkg"
+
+
 def test_invalid_version_falls_to_breaking():
     alert = VulnerabilityAlert(
         alert_number=99,

@@ -23,6 +23,7 @@ class VulnerabilityAlert(BaseModel):
     summary: str = ""
     vuln_description: str = ""
     category_override: str | None = None
+    alternative_package: str | None = None
 
 
 class TriageResult(BaseModel):
@@ -36,9 +37,29 @@ class TriageResult(BaseModel):
     advisory_url: str | None
     recommended_action: str
     vuln_description: str = ""
+    alternative_package: str | None = None
 
 
 def classify(alert: VulnerabilityAlert) -> TriageResult:
+    if alert.category_override == "library_replacement":
+        return TriageResult(
+            category=TriageCategory.LIBRARY_REPLACEMENT,
+            package_name=alert.package_name,
+            ecosystem=alert.ecosystem,
+            current_version=alert.current_version,
+            fix_version=alert.fix_version,
+            cve_ids=alert.cve_ids,
+            severity=alert.severity,
+            advisory_url=alert.advisory_url,
+            recommended_action=(
+                f"Replace {alert.package_name} with "
+                f"{alert.alternative_package or 'a safer alternative'}. "
+                "Migrate all usages and ensure tests pass."
+            ),
+            vuln_description=alert.vuln_description,
+            alternative_package=alert.alternative_package,
+        )
+
     if alert.category_override == "code_audit":
         return TriageResult(
             category=TriageCategory.CODE_AUDIT,
