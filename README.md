@@ -300,9 +300,23 @@ Schema uses dialect-agnostic SQLAlchemy types (`String(n)`, `Text`, `Integer`, `
 ## Development
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
+cp .env.example .env        # then fill in DEVIN_API_TOKEN, DEVIN_ORG_ID, GITHUB_TOKEN
+```
+
+Run checks:
+
+```bash
 ruff check app/ tests/
 python -m pytest tests/ -v
+```
+
+Start the server locally:
+
+```bash
+uvicorn app.main:app --reload
 ```
 
 ## Project Structure
