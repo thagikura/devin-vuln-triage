@@ -1,0 +1,31 @@
+{
+  "action": "created",
+  "alert": {
+    "number": 3,
+    "state": "open",
+    "dependency": {
+      "package": {
+        "ecosystem": "pip",
+        "name": "pyarrow"
+      },
+      "manifest_path": "requirements/base.txt"
+    },
+    "security_advisory": {
+      "ghsa_id": "GHSA-pyarrow-2026",
+      "cve_id": "PYSEC-2026-113",
+      "summary": "Use After Free in Apache Arrow C++ IPC reader",
+      "severity": "medium",
+      "permalink": "https://github.com/advisories/GHSA-pyarrow-2026"
+    },
+    "security_vulnerability": {
+      "severity": "medium",
+      "vulnerable_version_range": ">= 15.0.0, < 23.0.1",
+      "first_patched_version": {
+        "identifier": "23.0.1"
+      }
+    }
+  },
+  "repository": {
+    "full_name": "thagikura/superset-fork"
+  }
+}
