@@ -51,12 +51,37 @@ Static Analysis                  ┌───────────┬──�
 
 ## Quick Start
 
+### Option A: Docker (recommended)
+
 ```bash
 git clone https://github.com/thagikura/devin-vuln-triage.git
 cd devin-vuln-triage
 cp .env.example .env
 # Edit .env with your Devin API token, org ID, and GitHub token
 docker compose up
+```
+
+### Option B: Local (Python 3.12+)
+
+```bash
+git clone https://github.com/thagikura/devin-vuln-triage.git
+cd devin-vuln-triage
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+cp .env.example .env
+# Edit .env with your Devin API token, org ID, and GitHub token
+```
+
+Then run the server and CLI:
+
+```bash
+# Start the server
+uvicorn app.main:app --port 8000
+
+# In another terminal (activate venv first)
+source .venv/bin/activate
+python -m app.cli status
 ```
 
 The server starts at `http://localhost:8000`.
@@ -155,8 +180,14 @@ Schema uses dialect-agnostic SQLAlchemy types (`String(n)`, `Text`, `Integer`, `
 ## Development
 
 ```bash
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
+
+# Lint
 ruff check app/ tests/
+
+# Tests
 python -m pytest tests/ -v
 ```
 
