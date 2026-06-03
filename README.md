@@ -317,7 +317,7 @@ python -m pytest tests/ -v
 Start the server locally:
 
 ```bash
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
 ## Project Structure
